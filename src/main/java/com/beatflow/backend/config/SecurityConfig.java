@@ -19,40 +19,29 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.List;
 
 @Configuration
+@EnableWebSecurity
 public class SecurityConfig {
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            JwtAuthenticationFilter jwtAuthFilter,
+            AuthenticationProvider authenticationProvider
+    ) throws Exception {
         http
+            // ✅ This line is the crucial fix for the 403 error
             .csrf(csrf -> csrf.disable())
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // Allow preflight requests from browsers
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
-                // Public endpoints
-                .requestMatchers(
-                    "/", "/index.html",
-                    "/auth/**",
-                    "/api/products/**",
-                    "/api/payments/**",
-                    "/actuator/health",
-                    "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html",
-
-                    // Static resources (if any served by backend)
-                    "/css/**", "/js/**", "/images/**", "/webjars/**"
-                ).permitAll()
-
-                // Everything else requires auth
+                .requestMatchers("/api/auth/**").permitAll()
                 .anyRequest().authenticated()
-            );
-
-        // If you have a JWT filter, add it here with .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+            )
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authenticationProvider(authenticationProvider)
+            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
-
     @Bean
     public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider auth = new DaoAuthenticationProvider();
