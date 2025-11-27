@@ -26,6 +26,13 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    private static final String[] PUBLIC_URLS = {
+            "/api/auth/**",
+            "/api/test",
+            "/api/health",
+            "/error"
+    };
+
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
@@ -33,16 +40,21 @@ public class SecurityConfig {
             AuthenticationProvider authenticationProvider
     ) throws Exception {
 
-        http
-            .csrf(csrf -> csrf.disable())
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+        http.csrf(csrf -> csrf.disable());
 
-            // 🔥 ALLOW EVERYTHING FOR NOW (NO MORE 403 ERRORS)
-            .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+        http.authorizeHttpRequests(auth -> auth
+                .requestMatchers(PUBLIC_URLS).permitAll()
+                .anyRequest().authenticated()
+        );
 
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authenticationProvider(authenticationProvider)
-            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+        http.sessionManagement(session -> session
+                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+        );
+
+        http.authenticationProvider(authenticationProvider);
+
+        // IMPORTANT FIX: Skip JWT filter for PUBLIC URLs
+        http.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
@@ -54,11 +66,12 @@ public class SecurityConfig {
     }
 
     @Bean
-    public AuthenticationProvider authenticationProvider(UserRepository userRepository, PasswordEncoder passwordEncoder) {
-        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
-        authProvider.setUserDetailsService(userDetailsService(userRepository));
-        authProvider.setPasswordEncoder(passwordEncoder);
-        return authProvider;
+    public AuthenticationProvider authenticationProvider(UserRepository userRepository,
+                                                         PasswordEncoder passwordEncoder) {
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(userDetailsService(userRepository));
+        provider.setPasswordEncoder(passwordEncoder);
+        return provider;
     }
 
     @Bean
@@ -67,22 +80,15 @@ public class SecurityConfig {
     }
 
     @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config)
+            throws Exception {
         return config.getAuthenticationManager();
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        
-        configuration.setAllowedOrigins(List.of(
-                "*",                           // Allow all origins (Kubernetes internal access)
-                "http://localhost:3000",
-                "http://localhost",
-                "http://nginx",                // frontend service inside cluster
-                "http://beatflow-frontend"     // service name
-        ));
-        
+        configuration.setAllowedOrigins(List.of("*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(false);
