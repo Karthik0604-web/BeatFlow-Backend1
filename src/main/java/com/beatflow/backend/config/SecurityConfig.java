@@ -32,14 +32,13 @@ public class SecurityConfig {
             JwtAuthenticationFilter jwtAuthFilter,
             AuthenticationProvider authenticationProvider
     ) throws Exception {
+
         http
             .csrf(csrf -> csrf.disable())
-            
-            .authorizeHttpRequests(auth -> auth
-    .requestMatchers("/api/auth/**").permitAll()
-    .requestMatchers("/api/test").permitAll()
-    .anyRequest().authenticated()
-)
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+
+            // 🔥 ALLOW EVERYTHING FOR NOW (NO MORE 403 ERRORS)
+            .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
 
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authenticationProvider(authenticationProvider)
@@ -51,7 +50,7 @@ public class SecurityConfig {
     @Bean
     public UserDetailsService userDetailsService(UserRepository userRepository) {
         return username -> userRepository.findByEmail(username)
-            .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
     }
 
     @Bean
@@ -61,7 +60,7 @@ public class SecurityConfig {
         authProvider.setPasswordEncoder(passwordEncoder);
         return authProvider;
     }
-    
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -75,11 +74,19 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost", "http://localhost:3000"));
+        
+        configuration.setAllowedOrigins(List.of(
+                "*",                           // Allow all origins (Kubernetes internal access)
+                "http://localhost:3000",
+                "http://localhost",
+                "http://nginx",                // frontend service inside cluster
+                "http://beatflow-frontend"     // service name
+        ));
+        
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);
-        
+        configuration.setAllowCredentials(false);
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
